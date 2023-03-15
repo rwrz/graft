@@ -135,14 +135,24 @@ func (rpc *NatsRpcDriver) HeartbeatCallback(hb *pb.Heartbeat) {
 func (rpc *NatsRpcDriver) VoteRequestCallback(vreq *pb.VoteRequest) {
 	// Don't respond to our own request.
 	if vreq.Candidate != rpc.node.Id() {
-		rpc.node.VoteRequests <- vreq
+		select {
+		case rpc.node.VoteRequests <- vreq:
+			break
+		case <-rpc.node.quit: // cancel upon quit
+			break
+		}
 	}
 }
 
 // VoteResponseCallback will place the response on the Graft
 // node's appropriate channel.
 func (rpc *NatsRpcDriver) VoteResponseCallback(vresp *pb.VoteResponse) {
-	rpc.node.VoteResponses <- vresp
+	select {
+	case rpc.node.VoteResponses <- vresp:
+		break
+	case <-rpc.node.quit: // cancel upon quit
+		break
+	}
 }
 
 // RequestVote is sent from the Graft node when it has become a

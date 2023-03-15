@@ -245,6 +245,9 @@ func (n *Node) isRunning() bool {
 
 // Process loop for a LEADER.
 func (n *Node) runAsLeader() {
+	// Drain and previous responses. Votes computed already.
+	n.drainPreviousVoteResponses()
+
 	// Setup our heartbeat ticker
 	hb := time.NewTicker(HEARTBEAT_INTERVAL)
 	defer hb.Stop()
@@ -367,6 +370,9 @@ func (n *Node) runAsCandidate() {
 
 // Process loop for a FOLLOWER.
 func (n *Node) runAsFollower() {
+	// Drain and previous responses, since we don't need them anymore (votes computed already)
+	n.drainPreviousVoteResponses()
+
 	for {
 		select {
 
