@@ -14,6 +14,7 @@
 package graft
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -54,7 +55,9 @@ type NatsRpcDriver struct {
 	vrespSub *nats.Subscription
 
 	// Graft node.
-	node *Node
+	node      *Node
+	ctx       context.Context
+	cancelCtx context.CancelFunc
 }
 
 // NewNatsRpc creates a new instance of the driver. The NATS connection
@@ -68,7 +71,8 @@ func NewNatsRpc(opts *nats.Options) (*NatsRpcDriver, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &NatsRpcDriver{ec: ec}, nil
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	return &NatsRpcDriver{ec: ec, ctx: ctx, cancelCtx: cancelCtx}, nil
 }
 
 // Init initializes the driver via the Graft node.
@@ -107,6 +111,9 @@ func (rpc *NatsRpcDriver) Close() {
 		rpc.vrespSub.Unsubscribe()
 		rpc.vrespSub = nil
 	}
+	if rpc.ctx.Err() == nil {
+		rpc.cancelCtx()
+	}
 	if rpc.ec != nil {
 		rpc.ec.Close()
 	}
@@ -138,8 +145,8 @@ func (rpc *NatsRpcDriver) VoteRequestCallback(vreq *pb.VoteRequest) {
 		select {
 		case rpc.node.VoteRequests <- vreq:
 			break
-		case <-rpc.node.quit: // cancel upon quit
-			break
+		case <-rpc.ctx.Done(): // cancel upon close
+			return
 		}
 	}
 }
@@ -150,8 +157,8 @@ func (rpc *NatsRpcDriver) VoteResponseCallback(vresp *pb.VoteResponse) {
 	select {
 	case rpc.node.VoteResponses <- vresp:
 		break
-	case <-rpc.node.quit: // cancel upon quit
-		break
+	case <-rpc.ctx.Done(): // cancel upon close
+		return
 	}
 }
 
